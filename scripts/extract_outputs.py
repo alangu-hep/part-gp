@@ -18,6 +18,7 @@ from weaver.utils.nn.tools import evaluate_classification
 from weaver.utils.logger import _logger, warn_n_times
 
 from utils.nn_utils.part_prediction import test_load
+from utils.download_utils.io_writer import _write_outputs_to_root
 from utils.nn_utils.hook_handler import register_forward_hooks, remove_all_forward_hooks, remove_handles
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -37,9 +38,9 @@ parser.add_argument('--demo', action='store_true', default=False,
                     help='Setup a demo that uses only 10% of the dataset')
 
 # Network Loading
-parser.add_argument('-m', '--target_modules', nargs = '*', default=['final_logits'], 
+parser.add_argument('-m', '--target_modules', nargs = '*', default=[], 
                     help='Target Modules for Hooking. SUPPORTED: ')
-parser.add_argument('-n', '--network-script', type=str, default=str((workingdir_path / 'part_models/ParticleTransformer.py')), help='Network for ParT')
+parser.add_argument('-n', '--network-script', type=str, default=str((workingdir_path / 'part_models/ParticleTransformer_network.py')), help='Network for ParT')
 
 # Data
 parser.add_argument('-d', '--data-type', type=str, default = 'full', help='Type of data for training')
@@ -117,8 +118,7 @@ interesting_layers = {
     'first_cls_attn': model.mod.cls_blocks[0].attn,
     'first_cls_block': model.mod.cls_blocks[0],
     'final_cls_attn': model.mod.cls_blocks[1].attn,
-    'final_cls_block': model.mod.cls_blocks[1],
-    'final_logits': model.mod.fc
+    'final_cls_block': model.mod.cls_blocks[1]
 }
 
 filtered_modules = {key: value for key, value in interesting_layers.items() if key in args.target_modules}
@@ -133,18 +133,36 @@ handles = register_forward_hooks(location_dict=filtered_modules, outputs=hook_ou
 Prediction
 '''
 
+output_dict = {
+    'predictions': {},
+}
+
 test_loaders, data_config = test_load(args)
+
+import awkward as ak
 
 for name, get_test_loader in test_loaders.items():
     
     test_loader = get_test_loader()
     
     test_metric, scores, labels, observers = evaluate_classification(model, test_loader, device, epoch=None, for_training=False)
+    
     _logger.info('Test metric %.5f' % test_metric, color='bold')
+    
+    to_append = {
+        'logits': scores,
+        'labels': labels
+    }
+
+    output_dict['predictions'].update(to_append)
+    output_dict['predictions'].update(observers)
+    
     del test_loader
 
 remove_handles(handles)
 
-print(f'Scores: \n{scores}')
-print(f'Labels: \n{labels}')
-print(f'Data: \n{observers}')
+path_to_outputdir = workingdir_path / 'outputs/part_outputs/model_preds'
+os.makedirs(path_to_outputdir, exist_ok=True)
+
+path_to_outputs = path_to_outputdir / 'demo_outputs.root'
+_write_outputs_to_root(str(path_to_outputs), output_dict)
