@@ -45,6 +45,7 @@ def setup_argparse():
 
     parser.add_argument('--log', type=str, default=None)
     parser.add_argument('--metrics-prefix', type=str, default=None)
+    parser.add_argument('--figures-prefix', type=str, default=None)
 
 # Knowledge Distillation
     

@@ -5,21 +5,13 @@ selection:
 new_variables:
    ### [format] name: formula
    ### can use functions from `math`, `np` (numpy), and `awkward` in the expression
-   p4: _p4_from_pxpypze(part_px, part_py, part_pz, part_energy)
-   subjets: _cluster_particles(p4, 4, algo='ca')
-   sj_px: subjets.px
-   sj_py: subjets.py
-   sj_pz: subjets.pz
-   sj_pt: subjets.pt
-   sj_E: subjets.E
-   sj_deta: ak.sum(subjets.eta, keepdims=True)
-   sj_dphi: ak.sum(subjets.phi, keepdims=True)
-   sj_deltaR: np.hypot(sj_deta, sj_dphi)
-   sj_mask: ak.ones_like(sj_E)
-   sj_pt_log: np.log(sj_pt)
-   sj_e_log: np.log(sj_E)
-   sj_logptrel: np.log(sj_pt/jet_pt)
-   sj_logerel: np.log(sj_E/jet_energy)
+   part_mask: ak.ones_like(part_energy)
+   part_pt: np.hypot(part_px, part_py)
+   part_pt_log: np.log(part_pt)
+   part_e_log: np.log(part_energy)
+   part_logptrel: np.log(part_pt/jet_pt)
+   part_logerel: np.log(part_energy/jet_energy)
+   part_deltaR: np.hypot(part_deta, part_dphi)
 
 preprocess:
   ### method: [manual, auto] - whether to use manually specified parameters for variable standardization
@@ -29,13 +21,13 @@ preprocess:
 
 inputs:
    pf_points:
-      length: 4
+      length: 32
       pad_mode: wrap
       vars: 
-         - [sj_deta, null]
-         - [sj_dphi, null]
+         - [part_deta, null]
+         - [part_dphi, null]
    pf_features:
-      length: 4
+      length: 32
       pad_mode: wrap
       vars: 
       ### [format 1]: var_name (no transformation)
@@ -44,34 +36,34 @@ inputs:
       ###              multiply_by(optional, default=1), 
       ###              clip_min(optional, default=-5), 
       ###              clip_max(optional, default=5), 
-      ###              pad_value(optional, default=0)]eta
-         - [sj_pt_log, 1.7, 0.7]
-         - [sj_e_log, 2.0, 0.7]
-         - [sj_logptrel, -4.7, 0.7]
-         - [sj_logerel, -4.7, 0.7]
-         - [sj_deltaR, 0.2, 4.0]
-         - [sj_deta, null]
-         - [sj_dphi, null]
+      ###              pad_value(optional, default=0)]
+         - [part_pt_log, 1.7, 0.7]
+         - [part_e_log, 2.0, 0.7]
+         - [part_logptrel, -4.7, 0.7]
+         - [part_logerel, -4.7, 0.7]
+         - [part_deltaR, 0.2, 4.0]
+         - [part_deta, null]
+         - [part_dphi, null]
    pf_vectors:
-      length: 4
+      length: 32
       pad_mode: wrap
       vars: 
-         - [sj_px, null]
-         - [sj_py, null]
-         - [sj_pz, null]
-         - [sj_E, null]
+         - [part_px, null]
+         - [part_py, null]
+         - [part_pz, null]
+         - [part_energy, null]
    pf_mask:
-      length: 4
+      length: 32
       pad_mode: constant
       vars: 
-         - [sj_mask, null]
+         - [part_mask, null]
 
 labels:
    ### type can be `simple`, `custom`
    ### [option 1] use `simple` for binary/multi-class classification, then `value` is a list of 0-1 labels
    type: simple
-   value: [label_QCD, label_Tbqq]
-   # label_QCD, label_Hbb, label_Hcc, label_Hgg, label_H4q, label_Hqql, label_Zqq, label_Wqq, label_Tbqq, label_Tbl]
+   value: [label_QCD, label_Hgg]
+   # label_QCD, label_Hbb, label_Hcc, label_Hgg, label_H4q, label_Hqql, label_Zqq, label_Wqq, label_Tbqq, label_Tbl
    ### [option 2] otherwise use `custom` to define the label, then `value` is a map
    # type: custom
    # value: 

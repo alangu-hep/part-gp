@@ -22,13 +22,34 @@ from postprocessing.io_writer import _write_outputs_to_root
 import torch
 import torch.nn as nn
 import numpy as np
+import matplotlib.pyplot as plt
+import mplhep as mh
+plt.style.use(mh.style.CMS)
 
-from weaver.utils.import_tools import import_module
+from importlib.util import spec_from_file_location, module_from_spec
+
 from weaver.utils.logger import _logger, warn_n_times, _configLogger
 import copy
 from pprint import pformat
+import time
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def import_module(path, name='_mod'):
+    pkg_root = os.path.dirname(os.path.abspath(path))
+    not_inserted = pkg_root not in sys.path
+    if not_inserted:
+        sys.path.insert(0, pkg_root)
+
+    spec = spec_from_file_location(name, path, 
+        submodule_search_locations=[]
+    )
+    mod = module_from_spec(spec)
+    mod.__package__ = name
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    sys.path.remove(pkg_root)
+    return mod
 
 def assemble_loaders(args):
 
@@ -64,6 +85,42 @@ def initialize_models(args, training, network, model_path=None):
     }
 
     return model_metadata
+
+def save_logits(args, metrics_dict):
+
+    fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(12, 12))
+    logits = metrics_dict['preds']['logits']
+    bkg = logits[:, 0]
+    signal = logits[:, 1]
+    confident = np.max(logits, axis=1)
+    least_confident = np.min(logits, axis=1)
+    ax[0, 0].hist(signal, bins=100)
+    ax[0, 0].set_title('Signal Logit Distribution')
+    ax[0, 0].set_xlabel('Value')
+    ax[0, 0].set_ylabel('log(Counts)')
+
+    ax[0, 1].hist(bkg, bins=100)
+    ax[0, 1].set_title('Background Logit Distribution')
+    ax[0, 1].set_xlabel('Value')
+    ax[0, 1].set_ylabel('log(Counts)')
+
+    ax[1, 0].hist(confident, bins=100)
+    ax[1, 0].set_title('Most Confident Logit Distribution')
+    ax[1, 0].set_xlabel('Value')
+    ax[1, 0].set_ylabel('log(Counts)')
+
+    ax[1, 1].hist(least_confident, bins=100)
+    ax[1, 1].set_title('Least Confident Logit Distribution')
+    ax[1, 1].set_xlabel('Value')
+    ax[1, 1].set_ylabel('log(Counts)')
+
+    for i in range(2):
+        for j in range(2):
+            ax[i, j].set_yscale('log')
+
+    fig.savefig(f'{args.figures_prefix}_logits.png', dpi=300, bbox_inches='tight', transparent=True, format='png')
+
+    plt.close(fig)
 
 def classifier(args, loader_dict, model_dict):
 
@@ -131,6 +188,23 @@ def classifier(args, loader_dict, model_dict):
     #output_dir = args.metrics_prefix[:args.metrics_prefix.rfind('/')]
     #os.makedirs(output_dir, exist_ok=True)
     #_write_outputs_to_root(args.metrics_prefix, test_dict)
+
+# remove this later
+
+    _logger.info('Re-evaluating for training set logits')
+
+    logit_tester = evaluation.ClassificationStats(
+        loss_fn,
+        model=model,
+        device=device,
+        loader=loader_dict['train'],
+        split='test'
+    )
+
+    _logger.info('Train Set Tester Initialized')
+    logit_dict = logit_tester.run()
+
+    save_logits(args, logit_dict)
 
 def knowledge_distillation(args, loader_dict, teacher_dict, student_dict):
     student = copy.deepcopy(student_dict['model']).to(device)
@@ -222,6 +296,23 @@ def knowledge_distillation(args, loader_dict, teacher_dict, student_dict):
     #os.makedirs(output_dir, exist_ok=True)
     #_write_outputs_to_root(args.metrics_prefix, test_dict)
 
+    _logger.info('Re-evaluating for training set logits')
+
+    logit_tester = evaluation.KDStats(
+        teacher=teacher,
+        cl_loss=loss_fn,
+        kd_loss=kd_loss,
+        model=student,
+        device=device,
+        loader=loader_dict['train'],
+        split='test'
+    )
+
+    _logger.info('Train Set Tester Initialized')
+    logit_dict = logit_tester.run()
+
+    save_logits(args, logit_dict)
+
 def svae(args, loader_dict, vae_dict, teacher_dict):
 
     vae = copy.deepcopy(vae_dict['model']).to(device)
@@ -295,11 +386,11 @@ def svae(args, loader_dict, vae_dict, teacher_dict):
 
         _logger.info(f'Starting Validation for epoch {epoch}')
         
-        model_val = evaluation.STCVAEStats(
+        model_val=evaluation.STCVAEStats(
             teacher=teacher,
             sup_loss=reg_loss,
-            vae_loss = vae_loss,
-            recon_loss = recon_loss,
+            vae_loss=vae_loss,
+            recon_loss=recon_loss,
             dataset_size=val_size,
             model=vae,
             device=device,
@@ -369,6 +460,8 @@ def main():
     _logger.info('args:\n - %s', '\n - '.join(str(it) for it in args.__dict__.items()))
     
     loader_dict = assemble_loaders(args)
+
+    start = time.time()
     
     if args.comp == 'DL':
         _logger.info('Training Regular Classifier')
@@ -390,6 +483,11 @@ def main():
         vae_dict = initialize_models(args, training=True, network=args.dr_network, model_path=args.dr_path)
         model_dict = initialize_models(args, training=True, network=args.model_network, model_path=args.model_path)
         symbolic_regression(args, loader_dict, model_dict, vae_dict)
+
+    end = time.time()
+    elapsed_time = end - start
+
+    _logger.info(f'Elapsed time: {elapsed_time:.2f} seconds')
 
 if __name__ == '__main__':
     main()

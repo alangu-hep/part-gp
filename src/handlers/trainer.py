@@ -15,7 +15,6 @@ import time
 class BaseTrainer:
     def __init__(self, model, opt, scheduler, train_loader, device, grad_scaler=None, clip_norm = None):
 
-        torch.autograd.set_detect_anomaly(True)
         model.train()
         self.model = model
         

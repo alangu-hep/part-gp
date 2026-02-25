@@ -1,7 +1,7 @@
 # TODO
 
 import torch
-from PELICAN.models.pelican_classifier import PELICANClassifier
+from .PELICAN.models.pelican_classifier import PELICANClassifier
 from weaver.utils.logger import _logger
 
 class PELICANWrapper(torch.nn.Module):
@@ -49,7 +49,7 @@ def get_model(data_config, **kwargs):
 
     cfg = dict(
         rank1_dim_multiplier=1,
-        num_channels_scalar=len(data_config.input_names),
+        num_channels_scalar=10,
         num_channels_m=[[60],]*5,
         num_channels_2to2=[35,]*5,
         num_channels_out=[60],
@@ -57,13 +57,13 @@ def get_model(data_config, **kwargs):
         stabilizer='so2',
         method='spurions',
         num_classes=len(data_config.label_value),
-        average_nobj=49,
+        average_nobj=32,
         drop_rate=0.01, 
         drop_rate_out=0.01,
-        dataset='jc',
+        dataset='',
         config='M',
         config_out='M',
-        scale=1.0
+        scale=0.1
     )
     cfg.update(**kwargs)
     _logger.info('Model config: %s' % str(cfg))
